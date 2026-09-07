@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type DragEvent } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 import { COLUMNS } from '../lib/types'
@@ -11,9 +11,22 @@ const currency = new Intl.NumberFormat('ru-RU', {
   maximumFractionDigits: 0,
 })
 
-function DealCard({ deal }: { deal: Deal }) {
+function DealCard({
+  deal,
+  onDragStart,
+  onDragEnd,
+}: {
+  deal: Deal
+  onDragStart: (e: DragEvent) => void
+  onDragEnd: () => void
+}) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+    <div
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      className="cursor-grab rounded-lg border border-gray-200 bg-white p-4 shadow-sm active:cursor-grabbing"
+    >
       <p className="text-lg font-semibold text-gray-900">{deal.client}</p>
       {deal.company && <p className="mt-0.5 text-sm text-gray-600">{deal.company}</p>}
       {deal.amount != null && (
@@ -28,6 +41,8 @@ function Main({ session }: { session: Session }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showModal, setShowModal] = useState(false)
+  const [draggedId, setDraggedId] = useState<string | null>(null)
+  const [dragOverKey, setDragOverKey] = useState<string | null>(null)
 
   useEffect(() => {
     loadDeals()
@@ -46,6 +61,55 @@ function Main({ session }: { session: Session }) {
       setDeals(data ?? [])
     }
     setLoading(false)
+  }
+
+  function handleDragStart(e: DragEvent, dealId: string) {
+    setDraggedId(dealId)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', dealId)
+  }
+
+  function handleColumnDragOver(e: DragEvent, columnKey: string) {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    if (dragOverKey !== columnKey) setDragOverKey(columnKey)
+  }
+
+  function handleColumnDragLeave() {
+    setDragOverKey(null)
+  }
+
+  function handleDrop(e: DragEvent, columnKey: string) {
+    e.preventDefault()
+    setDragOverKey(null)
+    const dealId = draggedId || e.dataTransfer.getData('text/plain')
+    if (dealId) moveDeal(dealId, columnKey)
+  }
+
+  function handleDragEnd() {
+    setDraggedId(null)
+    setDragOverKey(null)
+  }
+
+  function moveDeal(dealId: string, toStage: string) {
+    const deal = deals.find((d) => d.id === dealId)
+    if (!deal || deal.stage === toStage) return
+
+    const prevStage = deal.stage
+    setDeals((prev) => prev.map((d) => (d.id === dealId ? { ...d, stage: toStage } : d)))
+
+    supabase
+      .from('deals')
+      .update({ stage: toStage })
+      .eq('id', dealId)
+      .then(({ error }) => {
+        if (error) {
+          setError(error.message)
+          setDeals((prev) =>
+            prev.map((d) => (d.id === dealId ? { ...d, stage: prevStage } : d)),
+          )
+        }
+      })
   }
 
   const byStage: Record<string, Deal[]> = {}
@@ -92,7 +156,12 @@ function Main({ session }: { session: Session }) {
             {COLUMNS.map((column) => (
               <div
                 key={column.key}
-                className="w-72 shrink-0 rounded-xl bg-gray-100 p-3"
+                onDragOver={(e) => handleColumnDragOver(e, column.key)}
+                onDragLeave={handleColumnDragLeave}
+                onDrop={(e) => handleDrop(e, column.key)}
+                className={`w-72 shrink-0 rounded-xl bg-gray-100 p-3 transition ${
+                  dragOverKey === column.key ? 'bg-gray-200 ring-2 ring-gray-400' : ''
+                }`}
               >
                 <h2 className="mb-3 font-semibold text-gray-700">
                   {column.label}
@@ -102,7 +171,12 @@ function Main({ session }: { session: Session }) {
                 </h2>
                 <div className="flex flex-col gap-3">
                   {byStage[column.key].map((deal) => (
-                    <DealCard key={deal.id} deal={deal} />
+                    <DealCard
+                      key={deal.id}
+                      deal={deal}
+                      onDragStart={(e) => handleDragStart(e, deal.id)}
+                      onDragEnd={handleDragEnd}
+                    />
                   ))}
                 </div>
               </div>

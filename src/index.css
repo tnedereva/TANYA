@@ -1,1 +1,20 @@
 @import "tailwindcss";
+
+.paw-walk {
+  animation: paw-step 0.5s ease-in-out infinite;
+  filter: drop-shadow(0 2px 3px rgba(88, 28, 135, 0.35));
+}
+
+@keyframes paw-step {
+  0%,
+  100% {
+    scale: 1 1;
+    translate: -50% -75%;
+    rotate: -8deg;
+  }
+  50% {
+    scale: 1.12 1.12;
+    translate: -50% -85%;
+    rotate: 8deg;
+  }
+}

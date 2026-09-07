@@ -1,4 +1,4 @@
-import { useEffect, useState, type DragEvent } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 import { COLUMNS } from '../lib/types'
@@ -12,24 +12,34 @@ const currency = new Intl.NumberFormat('ru-RU', {
   maximumFractionDigits: 0,
 })
 
+function Paw() {
+  return (
+    <svg width="44" height="44" viewBox="0 0 44 44" aria-hidden="true">
+      <g fill="#c4b5fd" stroke="#8b5cf6" strokeWidth="1.5">
+        <ellipse cx="22" cy="29" rx="13" ry="11" />
+        <ellipse cx="11" cy="15" rx="5" ry="5.5" />
+        <ellipse cx="20" cy="10" rx="5" ry="5.5" />
+        <ellipse cx="30" cy="12" rx="5" ry="5.5" />
+        <ellipse cx="36" cy="22" rx="4.5" ry="5.5" />
+      </g>
+    </svg>
+  )
+}
+
 function DealCard({
   deal,
-  onDragStart,
-  onDragEnd,
+  onPointerDown,
   onClick,
 }: {
   deal: Deal
-  onDragStart: (e: DragEvent) => void
-  onDragEnd: () => void
+  onPointerDown: (e: ReactPointerEvent<HTMLDivElement>, dealId: string) => void
   onClick: () => void
 }) {
   return (
     <div
-      draggable
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
+      onPointerDown={(e) => onPointerDown(e, deal.id)}
       onClick={onClick}
-      className="cursor-grab rounded-lg border border-yellow-400 bg-yellow-200 p-4 shadow-sm transition hover:shadow-md active:cursor-grabbing"
+      className="cursor-grab select-none rounded-lg border border-yellow-400 bg-yellow-200 p-4 shadow-sm transition hover:shadow-md active:cursor-grabbing"
     >
       <p className="text-lg font-semibold text-gray-900">{deal.client}</p>
       {deal.company && <p className="mt-0.5 text-sm text-gray-600">{deal.company}</p>}
@@ -45,9 +55,12 @@ function Main({ session }: { session: Session }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showModal, setShowModal] = useState(false)
-  const [draggedId, setDraggedId] = useState<string | null>(null)
   const [dragOverKey, setDragOverKey] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [dragging, setDragging] = useState(false)
+  const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null)
+
+  const dragRef = useRef<{ dealId: string; moved: boolean } | null>(null)
 
   useEffect(() => {
     loadDeals()
@@ -73,32 +86,49 @@ function Main({ session }: { session: Session }) {
     setLoading(false)
   }
 
-  function handleDragStart(e: DragEvent, dealId: string) {
-    setDraggedId(dealId)
-    e.dataTransfer.effectAllowed = 'move'
-    e.dataTransfer.setData('text/plain', dealId)
-  }
-
-  function handleColumnDragOver(e: DragEvent, columnKey: string) {
+  function handlePointerDown(e: ReactPointerEvent<HTMLDivElement>, dealId: string) {
     e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-    if (dragOverKey !== columnKey) setDragOverKey(columnKey)
+    dragRef.current = { dealId, moved: false }
+    e.currentTarget.setPointerCapture(e.pointerId)
+    setDragging(true)
+    setCursor({ x: e.clientX, y: e.clientY })
   }
 
-  function handleColumnDragLeave() {
+  function handlePointerMove(e: ReactPointerEvent<HTMLDivElement>) {
+    if (!dragging || !dragRef.current) return
+
+    const start = dragRef.current
+    if (
+      Math.abs(e.clientX - (cursor?.x ?? e.clientX)) > 2 ||
+      Math.abs(e.clientY - (cursor?.y ?? e.clientY)) > 2
+    ) {
+      start.moved = true
+    }
+
+    setCursor({ x: e.clientX, y: e.clientY })
+
+    const el = document.elementFromPoint(e.clientX, e.clientY)
+    const columnEl = el?.closest('[data-column]') as HTMLElement | null
+    setDragOverKey(columnEl?.dataset.column ?? null)
+  }
+
+  function handlePointerUp() {
+    const start = dragRef.current
+    if (start?.moved && dragOverKey) {
+      moveDeal(start.dealId, dragOverKey)
+    }
+    dragRef.current = null
+    setDragging(false)
+    setCursor(null)
     setDragOverKey(null)
   }
 
-  function handleDrop(e: DragEvent, columnKey: string) {
-    e.preventDefault()
-    setDragOverKey(null)
-    const dealId = draggedId || e.dataTransfer.getData('text/plain')
-    if (dealId) moveDeal(dealId, columnKey)
-  }
-
-  function handleDragEnd() {
-    setDraggedId(null)
-    setDragOverKey(null)
+  function handleClick(dealId: string) {
+    if (dragRef.current?.moved) {
+      dragRef.current.moved = false
+      return
+    }
+    setSelectedId(dealId)
   }
 
   function moveDeal(dealId: string, toStage: string) {
@@ -141,7 +171,11 @@ function Main({ session }: { session: Session }) {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-purple-200">
+    <div
+      className="flex min-h-screen flex-col bg-purple-200"
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+    >
       <header className="flex items-center justify-between border-b border-purple-300 bg-purple-100 px-6 py-4">
         <h1 className="text-2xl font-bold text-gray-900">Моя CRM</h1>
         <div className="flex items-center gap-4">
@@ -179,9 +213,7 @@ function Main({ session }: { session: Session }) {
             {COLUMNS.map((column) => (
               <div
                 key={column.key}
-                onDragOver={(e) => handleColumnDragOver(e, column.key)}
-                onDragLeave={handleColumnDragLeave}
-                onDrop={(e) => handleDrop(e, column.key)}
+                data-column={column.key}
                 className={`w-72 shrink-0 rounded-xl bg-purple-100 p-3 transition ${
                   dragOverKey === column.key ? 'bg-purple-300 ring-2 ring-purple-500' : ''
                 }`}
@@ -197,9 +229,8 @@ function Main({ session }: { session: Session }) {
                     <DealCard
                       key={deal.id}
                       deal={deal}
-                      onDragStart={(e) => handleDragStart(e, deal.id)}
-                      onDragEnd={handleDragEnd}
-                      onClick={() => setSelectedId(deal.id)}
+                      onPointerDown={handlePointerDown}
+                      onClick={() => handleClick(deal.id)}
                     />
                   ))}
                 </div>
@@ -208,6 +239,15 @@ function Main({ session }: { session: Session }) {
           </div>
         )}
       </main>
+
+      {dragging && cursor && (
+        <div
+          className="paw-walk pointer-events-none fixed z-50"
+          style={{ left: cursor.x, top: cursor.y }}
+        >
+          <Paw />
+        </div>
+      )}
 
       {showModal && (
         <AddDealModal

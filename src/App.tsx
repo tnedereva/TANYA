@@ -1,12 +1,31 @@
+import { useEffect, useState } from 'react'
+import type { Session } from '@supabase/supabase-js'
+import { supabase } from './lib/supabase'
+import Auth from './components/Auth'
+import Main from './components/Main'
+
 function App() {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-white">
-      <div className="text-center">
-        <h1 className="text-5xl font-bold text-gray-900">Моя CRM</h1>
-        <p className="mt-4 text-lg text-gray-400">Здесь будет доска сделок</p>
-      </div>
-    </div>
-  )
+  const [session, setSession] = useState<Session | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session)
+      setLoading(false)
+    })
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  if (loading) return null
+
+  return session ? <Main session={session} /> : <Auth />
 }
 
 export default App

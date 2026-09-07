@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { COLUMNS } from '../lib/types'
 import type { Deal } from '../lib/types'
 import AddDealModal from './AddDealModal'
+import DealDetailModal from './DealDetailModal'
 
 const currency = new Intl.NumberFormat('ru-RU', {
   style: 'currency',
@@ -15,17 +16,20 @@ function DealCard({
   deal,
   onDragStart,
   onDragEnd,
+  onClick,
 }: {
   deal: Deal
   onDragStart: (e: DragEvent) => void
   onDragEnd: () => void
+  onClick: () => void
 }) {
   return (
     <div
       draggable
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
-      className="cursor-grab rounded-lg border border-gray-200 bg-white p-4 shadow-sm active:cursor-grabbing"
+      onClick={onClick}
+      className="cursor-grab rounded-lg border border-gray-200 bg-white p-4 shadow-sm transition hover:shadow-md active:cursor-grabbing"
     >
       <p className="text-lg font-semibold text-gray-900">{deal.client}</p>
       {deal.company && <p className="mt-0.5 text-sm text-gray-600">{deal.company}</p>}
@@ -43,10 +47,16 @@ function Main({ session }: { session: Session }) {
   const [showModal, setShowModal] = useState(false)
   const [draggedId, setDraggedId] = useState<string | null>(null)
   const [dragOverKey, setDragOverKey] = useState<string | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
 
   useEffect(() => {
     loadDeals()
   }, [])
+
+  function onDealWon(deal: Deal) {
+    console.log('Сделка завершена успехом:', deal)
+    // сюда позже подключим уведомления/интеграции
+  }
 
   async function loadDeals() {
     setLoading(true)
@@ -108,9 +118,22 @@ function Main({ session }: { session: Session }) {
           setDeals((prev) =>
             prev.map((d) => (d.id === dealId ? { ...d, stage: prevStage } : d)),
           )
+        } else if (toStage === 'success') {
+          onDealWon({ ...deal, stage: toStage })
         }
       })
   }
+
+  function handleSaved(updated: Deal) {
+    setDeals((prev) => prev.map((d) => (d.id === updated.id ? updated : d)))
+  }
+
+  function handleDeleted(id: string) {
+    setDeals((prev) => prev.filter((d) => d.id !== id))
+    setSelectedId(null)
+  }
+
+  const selectedDeal = selectedId ? deals.find((d) => d.id === selectedId) ?? null : null
 
   const byStage: Record<string, Deal[]> = {}
   for (const column of COLUMNS) {
@@ -176,6 +199,7 @@ function Main({ session }: { session: Session }) {
                       deal={deal}
                       onDragStart={(e) => handleDragStart(e, deal.id)}
                       onDragEnd={handleDragEnd}
+                      onClick={() => setSelectedId(deal.id)}
                     />
                   ))}
                 </div>
@@ -191,6 +215,16 @@ function Main({ session }: { session: Session }) {
           user={session.user}
           onClose={() => setShowModal(false)}
           onCreated={(deal) => setDeals((prev) => [deal, ...prev])}
+        />
+      )}
+
+      {selectedDeal && (
+        <DealDetailModal
+          deal={selectedDeal}
+          onDealWon={onDealWon}
+          onClose={() => setSelectedId(null)}
+          onSaved={handleSaved}
+          onDeleted={handleDeleted}
         />
       )}
     </div>

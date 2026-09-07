@@ -29,7 +29,7 @@ function DealCard({
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       onClick={onClick}
-      className="cursor-grab rounded-lg border border-gray-200 bg-white p-4 shadow-sm transition hover:shadow-md active:cursor-grabbing"
+      className="cursor-grab rounded-lg border border-yellow-400 bg-yellow-200 p-4 shadow-sm transition hover:shadow-md active:cursor-grabbing"
     >
       <p className="text-lg font-semibold text-gray-900">{deal.client}</p>
       {deal.company && <p className="mt-0.5 text-sm text-gray-600">{deal.company}</p>}
@@ -141,8 +141,8 @@ function Main({ session }: { session: Session }) {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-gray-50">
-      <header className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4">
+    <div className="flex min-h-screen flex-col bg-purple-200">
+      <header className="flex items-center justify-between border-b border-purple-300 bg-purple-100 px-6 py-4">
         <h1 className="text-2xl font-bold text-gray-900">Моя CRM</h1>
         <div className="flex items-center gap-4">
           <span className="hidden text-sm text-gray-500 sm:block">
@@ -182,8 +182,8 @@ function Main({ session }: { session: Session }) {
                 onDragOver={(e) => handleColumnDragOver(e, column.key)}
                 onDragLeave={handleColumnDragLeave}
                 onDrop={(e) => handleDrop(e, column.key)}
-                className={`w-72 shrink-0 rounded-xl bg-gray-100 p-3 transition ${
-                  dragOverKey === column.key ? 'bg-gray-200 ring-2 ring-gray-400' : ''
+                className={`w-72 shrink-0 rounded-xl bg-purple-100 p-3 transition ${
+                  dragOverKey === column.key ? 'bg-purple-300 ring-2 ring-purple-500' : ''
                 }`}
               >
                 <h2 className="mb-3 font-semibold text-gray-700">
